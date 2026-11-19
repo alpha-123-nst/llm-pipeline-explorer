@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "api/pipeline.py", "use": "@vercel/python", "config": { "maxLambdaSize": "50mb" } }
+  ],
+  "routes": [
+    { "src": "/api/pipeline", "dest": "api/pipeline.py" },
+    { "src": "/(.*)", "dest": "/public/$1" }
+  ]
+}

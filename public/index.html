@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>LLM Pipeline Explorer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Plotly for 2‑D embedding visualisation -->
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <style>
+    body {font-family: Arial, sans-serif;}
+    .pipeline-step {display: flex; align-items: center;}
+    .pipeline-step::after {content: '→'; margin: 0 0.5rem; font-weight: bold;}
+    .pipeline-step:last-child::after {content: ''}
+  </style>
+</head>
+<body class="bg-gray-100 flex flex-col items-center p-6">
+  <h1 class="text-3xl font-bold mb-4">LLM Pipeline Explorer</h1>
+
+  <div class="w-full max-w-2xl bg-white shadow rounded p-4 mb-6">
+    <label class="block font-medium mb-2" for="modelSelect">Select model / pipeline</label>
+    <select id="modelSelect" class="w-full border rounded p-2">
+      <option value="bert">BERT Tokeniser (only tokenisation)</option>
+      <option value="minilm">MiniLM Embedding</option>
+      <option value="gpt2">GPT‑2 Generation</option>
+    </select>
+  </div>
+
+  <div class="w-full max-w-2xl bg-white shadow rounded p-4 mb-6">
+    <label class="block font-medium mb-2" for="prompt">Enter text / prompt</label>
+    <textarea id="prompt" class="w-full h-32 border rounded p-2" placeholder="Type something...">The quick brown fox jumps over the lazy dog.</textarea>
+    <button id="runBtn" class="mt-3 w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Run pipeline</button>
+  </div>
+
+  <div id="pipelineContainer" class="flex space-x-2 mb-6 text-gray-700"></div>
+
+  <div id="resultArea" class="w-full max-w-2xl bg-white shadow rounded p-4 mb-6 hidden">
+    <h2 class="text-xl font-semibold mb-2">Result</h2>
+    <div id="tokensSection" class="mb-4 hidden">
+      <h3 class="font-medium">Tokens (ID)</h3>
+      <pre id="tokensOutput" class="bg-gray-50 p-2 rounded overflow-x-auto"></pre>
+    </div>
+    <div id="embeddingSection" class="mb-4 hidden">
+      <h3 class="font-medium">Embedding (2‑D PCA)</h3>
+      <div id="plot" class="h-64"></div>
+    </div>
+    <div id="generationSection" class="mb-4 hidden">
+      <h3 class="font-medium">Generated text (GPT‑2)</h3>
+      <pre id="genOutput" class="bg-gray-50 p-2 rounded"></pre>
+    </div>
+  </div>
+
+  <script>
+    async function runPipeline() {
+      const model = document.getElementById('modelSelect').value;
+      const text = document.getElementById('prompt').value;
+
+      // Show loading state
+      const btn = document.getElementById('runBtn');
+      btn.disabled = true; btn.textContent = 'Running…';
+
+      const resp = await fetch('/api/pipeline', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({text, model})
+      });
+      btn.disabled = false; btn.textContent = 'Run pipeline';
+
+      const data = await resp.json();
+
+      // Show pipeline steps
+      const pipelineDiv = document.getElementById('pipelineContainer');
+      pipelineDiv.innerHTML = '';
+      data.pipeline.forEach(step => {
+        const span = document.createElement('span');
+        span.className = 'pipeline-step';
+        span.textContent = step;
+        pipelineDiv.appendChild(span);
+      });
+
+      // Show result area
+      const result = document.getElementById('resultArea');
+      result.classList.remove('hidden');
+
+      // Tokens
+      const tokSec = document.getElementById('tokensSection');
+      if (data.tokens && data.token_ids) {
+        tokSec.classList.remove('hidden');
+        document.getElementById('tokensOutput').textContent =
+          data.tokens.map((t,i)=> `${i}: "${t}" (${data.token_ids[i]})`).join('\n');
+      } else {
+        tokSec.classList.add('hidden');
+      }
+
+      // Embedding (2‑D)
+      const embedSec = document.getElementById('embeddingSection');
+      if (data.embedding_2d) {
+        embedSec.classList.remove('hidden');
+        const [x, y] = data.embedding_2d;
+        const trace = {x:[x], y:[y], mode:'markers', type:'scatter', marker:{size:12, color:'tomato'}};
+        Plotly.newPlot('plot', [trace], {margin:{l:20,r:20,b:20,t:20}});
+      } else {
+        embedSec.classList.add('hidden');
+      }
+
+      // Generation
+      const genSec = document.getElementById('generationSection');
+      if (data.generation) {
+        genSec.classList.remove('hidden');
+        document.getElementById('genOutput').textContent = data.generation;
+      } else {
+        genSec.classList.add('hidden');
+      }
+    }
+
+    document.getElementById('runBtn').addEventListener('click', runPipeline);
+  </script>
+</body>
+</html>
